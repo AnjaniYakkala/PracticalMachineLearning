@@ -1,0 +1,108 @@
+---
+title: "Classification Model for Quality of Activity"
+author: "Anjani Yakkala"
+date: "03/10/2018"
+---
+
+
+##Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+##Data Sources
+
+The training data for this project are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har. 
+
+## Data Download & Cleaning
+
+The below steps will download the data directly into the working folder and performs data cleaning so that data can be used for Machine Learning algorithms
+
+```{r,warning=FALSE,message=FALSE,cache=TRUE}
+library(caret)
+# Set the directory
+setwd("/Users/MyMac/Documents/Projects/R/PracticalMachineLearning/PeerReview/")
+#Download both the training and testing datasets 
+fileUrl<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(fileUrl,destfile="training.csv",method="curl")
+fileUrl<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(fileUrl,destfile="testing.csv",method="curl")
+# Read the file
+training<-read.csv("training.csv", header = TRUE, sep = ",")
+testing<-read.csv("testing.csv", header = TRUE, sep = ",")
+#Removing zero covariates
+nsv<-nearZeroVar(training,saveMetrics=TRUE)
+trainingv1<-training[,!nsv$nzv]
+testingv1<-testing[,!nsv$nzv]
+#Exclude the columns with NAs
+trainingv2 <- trainingv1[, colSums(is.na(trainingv1)) == 0]
+testingv2 <- testingv1[, colSums(is.na(testingv1)) == 0]
+# Remove indicative columns "X", "user name","time stamps"
+trainingv3 <- trainingv2[, -c(1,2,3,4,5)]
+testingv3 <- testingv2[, -c(1,2,3,4,5)]
+
+```
+
+## Model selection 
+
+Given it is a classification process, random forests usually provide better accuracy. Hence random forests machine learning algorithm will be applied for predicting the classe variable. In general, random forests runs effectively on large datasets and also good when there are several predictors. The training dataset is divided into a training set and a cross validation dataset. At first a random forest model is developed using training dataset and then tested on cross validation dataset. Then we generate the confusion matrix, which provides important details on the model. Given the accuracy as shown in the confusion matrix in the below code, the random forest method provides pretty good results. Given the accuracy is high, the expectation is that out of sample error will be small. As shown in below code, the cross validation test results out of sample error is small and hence random forest method is a suitable method for the classe predictions. 
+
+For comparison,  Linear Discriminant Analysis (LDA) was also performed below. The confusion matrix for LDA shows that this model accuracy is less than the random forests. Hence random forests as described above is the best method for these classe predictions.
+
+Following are two sections one for Random Forests and the other for LDA.
+
+
+### Random Forest Model
+```{r,cache=TRUE}
+# Split the data for crossvalidation and training
+inTrain <- createDataPartition(trainingv3$classe, p = 0.70, list = FALSE)
+crossvalidation <- trainingv3[-inTrain, ]
+trainingv4 <- trainingv3[inTrain, ]
+
+#Fit the model on training dataset
+set.seed(20)
+modelfit <- train(classe ~ ., data = trainingv4, method = "rf", trControl = trainControl(method = "cv", 5), ntree = 300)
+
+#Perform the crossvalidation
+predictions <- predict(modelfit, crossvalidation)
+confusionMatrix(crossvalidation$classe, predictions)
+
+#Calculate out of sample error
+OutofSampleError <- 1 - (sum(predictions==crossvalidation$classe)/length(predictions))
+OutofSampleError
+        
+#Perform the prediction on the testing sample
+# Remove the Problem ID column
+testingv4<-testingv3[, -c(90)]
+classepredictions<-predict(modelfit,newdata=testingv4)
+#Print the predictions for the classe variable
+classepredictions
+
+```
+
+####The out of sample error for random forests is = `r OutofSampleError`
+
+
+### Linear Discriminant Analysis (LDA) Model
+As shown below in confusion matrix for LDA, the accuracy is less than random forest method above. Hence random forest is the best when compared to LDA for these classe predictions. 
+```{r,cache=TRUE}
+#Fit the model on training dataset
+set.seed(20)
+modelfit <- train(classe ~ ., data = trainingv4, method = "lda", trControl = trainControl(method = "cv", 5))
+
+#Perform the crossvalidation
+predictions <- predict(modelfit, crossvalidation)
+confusionMatrix(crossvalidation$classe, predictions)
+
+#Calculate out of sample error
+OutofSampleError <- 1 - (sum(predictions==crossvalidation$classe)/length(predictions))
+OutofSampleError
+
+```
